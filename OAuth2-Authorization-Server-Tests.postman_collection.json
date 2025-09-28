@@ -1,0 +1,1299 @@
+{
+	"info": {
+		"_postman_id": "oauth2-server-tests-v2",
+		"name": "OAuth2 Authorization Server - Complete Tests",
+		"description": "Comprehensive test collection for OAuth2 Authorization Server with proper variable abstraction and environment support.\n\n## Setup Instructions:\n1. Import this collection\n2. Set up environment variables (see Variables tab)\n3. Run the collection or individual requests\n\n## Key Features:\n- Complete OAuth2 flow testing\n- Automatic token extraction and reuse\n- Environment variable abstraction\n- Error handling validation\n- OIDC endpoint testing",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Server Discovery",
+			"item": [
+				{
+					"name": "OAuth2 Server Metadata",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains OAuth2 metadata\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('issuer');",
+									"    pm.expect(jsonData).to.have.property('authorization_endpoint');",
+									"    pm.expect(jsonData).to.have.property('token_endpoint');",
+									"    pm.expect(jsonData).to.have.property('jwks_uri');",
+									"});",
+									"",
+									"pm.test(\"Extract and set endpoints\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('authorization_endpoint', jsonData.authorization_endpoint);",
+									"    pm.environment.set('token_endpoint', jsonData.token_endpoint);",
+									"    pm.environment.set('jwks_uri', jsonData.jwks_uri);",
+									"    pm.environment.set('issuer', jsonData.issuer);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/.well-known/oauth-authorization-server",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								".well-known",
+								"oauth-authorization-server"
+							]
+						},
+						"description": "Discover OAuth2 server metadata and extract endpoint URLs"
+					}
+				},
+				{
+					"name": "OIDC Configuration",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains OIDC configuration\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('issuer');",
+									"    pm.expect(jsonData).to.have.property('userinfo_endpoint');",
+									"    pm.expect(jsonData).to.have.property('scopes_supported');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/.well-known/openid_configuration",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								".well-known",
+								"openid_configuration"
+							]
+						},
+						"description": "Get OpenID Connect configuration"
+					}
+				},
+				{
+					"name": "JWK Set",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains JWK set\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('keys');",
+									"    pm.expect(jsonData.keys).to.be.an('array');",
+									"    pm.expect(jsonData.keys.length).to.be.greaterThan(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/oauth2/jwks",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"jwks"
+							]
+						},
+						"description": "Get JSON Web Key Set for token verification"
+					}
+				}
+			],
+			"description": "Discover server capabilities and endpoints"
+		},
+		{
+			"name": "2. Client Credentials Flow",
+			"item": [
+				{
+					"name": "Get Access Token (Client Credentials)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains access token\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData).to.have.property('token_type');",
+									"    pm.expect(jsonData).to.have.property('expires_in');",
+									"    pm.expect(jsonData.token_type).to.eql('Bearer');",
+									"});",
+									"",
+									"pm.test(\"Extract and store access token\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('client_credentials_access_token', jsonData.access_token);",
+									"    pm.environment.set('token_type', jsonData.token_type);",
+									"    ",
+									"    // Calculate expiry time",
+									"    const expiryTime = new Date(Date.now() + (jsonData.expires_in * 1000));",
+									"    pm.environment.set('token_expires_at', expiryTime.toISOString());",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "client_credentials",
+									"type": "text"
+								},
+								{
+									"key": "scope",
+									"value": "{{default_scope}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"token"
+							]
+						},
+						"description": "Request access token using client credentials grant"
+					}
+				},
+				{
+					"name": "Introspect Token (Client Credentials)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Token is active\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('active', true);",
+									"    pm.expect(jsonData).to.have.property('client_id', pm.environment.get('client_id'));",
+									"    pm.expect(jsonData).to.have.property('scope');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "token",
+									"value": "{{client_credentials_access_token}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/introspect",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"introspect"
+							]
+						},
+						"description": "Introspect the access token to verify its validity and metadata"
+					}
+				}
+			],
+			"description": "Test OAuth2 Client Credentials Grant flow"
+		},
+		{
+			"name": "3. Authorization Code Flow",
+			"item": [
+				{
+					"name": "Authorization Request (Browser)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/oauth2/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{redirect_uri}}&scope={{authorization_scope}}&state={{$randomUUID}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"authorize"
+							],
+							"query": [
+								{
+									"key": "response_type",
+									"value": "code"
+								},
+								{
+									"key": "client_id",
+									"value": "{{client_id}}"
+								},
+								{
+									"key": "redirect_uri",
+									"value": "{{redirect_uri}}"
+								},
+								{
+									"key": "scope",
+									"value": "{{authorization_scope}}"
+								},
+								{
+									"key": "state",
+									"value": "{{$randomUUID}}"
+								}
+							]
+						},
+						"description": "Initial authorization request - this will redirect to login page in browser.\n\n**Manual Step Required:**\n1. Copy this URL and open in browser\n2. Login with credentials (user/password)\n3. Approve the authorization\n4. Copy the authorization code from the redirect URL\n5. Use the code in the next request"
+					}
+				},
+				{
+					"name": "Exchange Code for Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains tokens\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData).to.have.property('refresh_token');",
+									"    pm.expect(jsonData).to.have.property('id_token');",
+									"    pm.expect(jsonData).to.have.property('token_type', 'Bearer');",
+									"});",
+									"",
+									"pm.test(\"Extract and store tokens\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('authorization_access_token', jsonData.access_token);",
+									"    pm.environment.set('refresh_token', jsonData.refresh_token);",
+									"    pm.environment.set('id_token', jsonData.id_token);",
+									"    ",
+									"    // Calculate expiry time",
+									"    const expiryTime = new Date(Date.now() + (jsonData.expires_in * 1000));",
+									"    pm.environment.set('auth_token_expires_at', expiryTime.toISOString());",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "authorization_code",
+									"type": "text"
+								},
+								{
+									"key": "code",
+									"value": "{{authorization_code}}",
+									"type": "text",
+									"description": "Paste the authorization code here from the redirect URL"
+								},
+								{
+									"key": "redirect_uri",
+									"value": "{{redirect_uri}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"token"
+							]
+						},
+						"description": "Exchange authorization code for access token, refresh token, and ID token.\n\n**Before running this request:**\n1. Set the 'authorization_code' environment variable with the code from the authorization redirect\n2. Make sure the redirect_uri matches exactly"
+					}
+				},
+				{
+					"name": "Refresh Access Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains new access token\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData).to.have.property('token_type', 'Bearer');",
+									"    pm.expect(jsonData).to.have.property('expires_in');",
+									"});",
+									"",
+									"pm.test(\"Update stored access token\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('authorization_access_token', jsonData.access_token);",
+									"    ",
+									"    // Update refresh token if provided",
+									"    if (jsonData.refresh_token) {",
+									"        pm.environment.set('refresh_token', jsonData.refresh_token);",
+									"    }",
+									"    ",
+									"    // Calculate new expiry time",
+									"    const expiryTime = new Date(Date.now() + (jsonData.expires_in * 1000));",
+									"    pm.environment.set('auth_token_expires_at', expiryTime.toISOString());",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "refresh_token",
+									"type": "text"
+								},
+								{
+									"key": "refresh_token",
+									"value": "{{refresh_token}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"token"
+							]
+						},
+						"description": "Use refresh token to get a new access token"
+					}
+				}
+			],
+			"description": "Test OAuth2 Authorization Code Grant flow with PKCE support"
+		},
+		{
+			"name": "4. Token Management",
+			"item": [
+				{
+					"name": "Revoke Access Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Token revocation successful\", function () {",
+									"    // Response should be empty for successful revocation",
+									"    const responseText = pm.response.text();",
+									"    pm.expect(responseText).to.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "token",
+									"value": "{{authorization_access_token}}",
+									"type": "text"
+								},
+								{
+									"key": "token_type_hint",
+									"value": "access_token",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/revoke",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"revoke"
+							]
+						},
+						"description": "Revoke an access token"
+					}
+				},
+				{
+					"name": "Revoke Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Token revocation successful\", function () {",
+									"    // Response should be empty for successful revocation",
+									"    const responseText = pm.response.text();",
+									"    pm.expect(responseText).to.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "token",
+									"value": "{{refresh_token}}",
+									"type": "text"
+								},
+								{
+									"key": "token_type_hint",
+									"value": "refresh_token",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/revoke",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"revoke"
+							]
+						},
+						"description": "Revoke a refresh token"
+					}
+				},
+				{
+					"name": "Verify Token After Revocation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Token is inactive after revocation\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('active', false);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "token",
+									"value": "{{authorization_access_token}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/introspect",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"introspect"
+							]
+						},
+						"description": "Verify that the token is inactive after revocation"
+					}
+				}
+			],
+			"description": "Test token revocation and validation"
+		},
+		{
+			"name": "5. Error Scenarios",
+			"item": [
+				{
+					"name": "Invalid Client Credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});",
+									"",
+									"pm.test(\"Response contains error\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('error');",
+									"    pm.expect(jsonData.error).to.include('invalid_client');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "invalid-client",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "wrong-secret",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "client_credentials",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"token"
+							]
+						},
+						"description": "Test error handling for invalid client credentials"
+					}
+				},
+				{
+					"name": "Invalid Grant Type",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Response contains error\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('error');",
+									"    pm.expect(jsonData.error).to.include('unsupported_grant_type');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "invalid_grant",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"token"
+							]
+						},
+						"description": "Test error handling for unsupported grant type"
+					}
+				},
+				{
+					"name": "Invalid Scope",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Response contains error\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('error');",
+									"    pm.expect(jsonData.error).to.include('invalid_scope');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "username",
+									"value": "{{client_id}}",
+									"type": "string"
+								},
+								{
+									"key": "password",
+									"value": "{{client_secret}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "client_credentials",
+									"type": "text"
+								},
+								{
+									"key": "scope",
+									"value": "invalid_scope unknown_permission",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/oauth2/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth2",
+								"token"
+							]
+						},
+						"description": "Test error handling for invalid scope"
+					}
+				}
+			],
+			"description": "Test various error scenarios and error handling"
+		},
+		{
+			"name": "6. Health & Monitoring",
+			"item": [
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Server is healthy\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status', 'UP');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/actuator/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"actuator",
+								"health"
+							]
+						},
+						"description": "Check server health status"
+					}
+				},
+				{
+					"name": "Application Info",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains app info\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    // Check if response has application information",
+									"    pm.expect(typeof jsonData).to.eql('object');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/actuator/info",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"actuator",
+								"info"
+							]
+						},
+						"description": "Get application information"
+					}
+				},
+				{
+					"name": "Metrics",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains metrics\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('names');",
+									"    pm.expect(jsonData.names).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/actuator/metrics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"actuator",
+								"metrics"
+							]
+						},
+						"description": "Get application metrics"
+					}
+				}
+			],
+			"description": "Test health and monitoring endpoints"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script",
+					"console.log('Running request to:', pm.request.url.toString());",
+					"",
+					"// Check if required environment variables are set",
+					"const requiredVars = ['base_url', 'client_id', 'client_secret'];",
+					"const missingVars = requiredVars.filter(varName => !pm.environment.get(varName));",
+					"",
+					"if (missingVars.length > 0) {",
+					"    console.warn('Missing environment variables:', missingVars.join(', '));",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"pm.test('Response time is acceptable', function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+					"});",
+					"",
+					"// Log response details for debugging",
+					"if (pm.response.code >= 400) {",
+					"    console.log('Error Response Status:', pm.response.status);",
+					"    console.log('Error Response Body:', pm.response.text());",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:9000",
+			"type": "string",
+			"description": "OAuth2 Authorization Server base URL"
+		},
+		{
+			"key": "client_id",
+			"value": "test-client",
+			"type": "string",
+			"description": "OAuth2 client identifier"
+		},
+		{
+			"key": "client_secret",
+			"value": "secret",
+			"type": "string",
+			"description": "OAuth2 client secret"
+		},
+		{
+			"key": "redirect_uri",
+			"value": "https://oauth.pstmn.io/v1/callback",
+			"type": "string",
+			"description": "OAuth2 redirect URI for authorization code flow"
+		},
+		{
+			"key": "default_scope",
+			"value": "read write",
+			"type": "string",
+			"description": "Default OAuth2 scopes for client credentials flow"
+		},
+		{
+			"key": "authorization_scope",
+			"value": "openid profile read write",
+			"type": "string",
+			"description": "OAuth2 scopes for authorization code flow with OIDC"
+		},
+		{
+			"key": "authorization_code",
+			"value": "",
+			"type": "string",
+			"description": "Authorization code from OAuth2 authorization flow (set manually)"
+		},
+		{
+			"key": "client_credentials_access_token",
+			"value": "",
+			"type": "string",
+			"description": "Access token from client credentials flow (auto-set)"
+		},
+		{
+			"key": "authorization_access_token",
+			"value": "",
+			"type": "string",
+			"description": "Access token from authorization code flow (auto-set)"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string",
+			"description": "Refresh token from authorization code flow (auto-set)"
+		},
+		{
+			"key": "id_token",
+			"value": "",
+			"type": "string",
+			"description": "ID token from OIDC flow (auto-set)"
+		},
+		{
+			"key": "token_type",
+			"value": "",
+			"type": "string",
+			"description": "Token type (usually Bearer) (auto-set)"
+		},
+		{
+			"key": "token_expires_at",
+			"value": "",
+			"type": "string",
+			"description": "Token expiration timestamp (auto-set)"
+		},
+		{
+			"key": "auth_token_expires_at",
+			"value": "",
+			"type": "string",
+			"description": "Authorization token expiration timestamp (auto-set)"
+		},
+		{
+			"key": "authorization_endpoint",
+			"value": "",
+			"type": "string",
+			"description": "OAuth2 authorization endpoint (auto-discovered)"
+		},
+		{
+			"key": "token_endpoint",
+			"value": "",
+			"type": "string",
+			"description": "OAuth2 token endpoint (auto-discovered)"
+		},
+		{
+			"key": "jwks_uri",
+			"value": "",
+			"type": "string",
+			"description": "JWK Set URI (auto-discovered)"
+		},
+		{
+			"key": "issuer",
+			"value": "",
+			"type": "string",
+			"description": "OAuth2 issuer URL (auto-discovered)"
+		}
+	]
+}

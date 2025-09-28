@@ -1,0 +1,397 @@
+# =============================================================================
+# Java OAuth2 Authorization Server - .gitignore
+# =============================================================================
+
+# =============================================================================
+# Java & JVM
+# =============================================================================
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Virtual machine crash logs
+hs_err_pid*
+replay_pid*
+
+# =============================================================================
+# Maven
+# =============================================================================
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# =============================================================================
+# Spring Boot
+# =============================================================================
+spring-boot-*.log
+application-*.log
+*.log
+
+# Spring Boot DevTools
+.springBeans
+
+# =============================================================================
+# Database Files
+# =============================================================================
+# H2 Database
+*.db
+*.h2.db
+*.mv.db
+*.trace.db
+
+# Other databases
+*.sqlite
+*.sqlite3
+
+# =============================================================================
+# Security & Secrets
+# =============================================================================
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+
+# Key files
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*.truststore
+
+# OAuth2 secrets (if stored in files)
+oauth2-secrets/
+client-secrets/
+jwt-keys/
+
+# SSL certificates
+*.crt
+*.cert
+*.ca-bundle
+
+# =============================================================================
+# IDE Files
+# =============================================================================
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+.idea_modules/
+
+# Eclipse
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+.project
+.classpath
+.factorypath
+.buildpath
+.target
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# =============================================================================
+# Operating System Files
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# Logs & Temporary Files
+# =============================================================================
+logs/
+*.log
+*.log.*
+log/
+temp/
+tmp/
+*.tmp
+*.temp
+
+# Application specific logs
+oauth2-server.log*
+authorization-server.log*
+access.log*
+error.log*
+
+# =============================================================================
+# Build & Deployment
+# =============================================================================
+build/
+dist/
+out/
+generated/
+generated-sources/
+generated-resources/
+
+# Docker
+.dockerignore
+Dockerfile.local
+docker-compose-local.yml
+.docker/
+
+# Kubernetes
+k8s-local/
+*.local.yaml
+*.local.yml
+
+# =============================================================================
+# Testing
+# =============================================================================
+# Test output
+test-output/
+test-results/
+coverage/
+.nyc_output/
+
+# Postman generated files
+*.postman_test_run.json
+newman-results/
+
+# =============================================================================
+# Package Managers & Dependencies
+# =============================================================================
+# Node.js (if using for frontend/tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# =============================================================================
+# Configuration Files (Environment Specific)
+# =============================================================================
+# Local development configurations
+application-local.properties
+application-dev.properties
+application-development.properties
+application-test.properties
+
+# Production configurations (should be managed separately)
+application-prod.properties
+application-production.properties
+
+# Custom environment configs
+config/local/
+config/dev/
+config/development/
+
+# =============================================================================
+# Backup Files
+# =============================================================================
+*.bak
+*.backup
+*.old
+*~
+*.orig
+*.save
+
+# =============================================================================
+# Documentation Generated Files
+# =============================================================================
+# JavaDoc
+/doc/
+/javadoc/
+
+# Markdown generated
+*.html
+
+# =============================================================================
+# Monitoring & Profiling
+# =============================================================================
+# JProfiler
+*.jfr
+
+# Flight Recorder
+*.hprof
+
+# Performance monitoring
+*.perf
+profiler/
+
+# =============================================================================
+# OAuth2 & Security Specific
+# =============================================================================
+# Token storage (if any)
+tokens/
+.tokens/
+
+# Session storage
+sessions/
+.sessions/
+
+# Client registration files (if dynamic)
+clients/
+registered-clients/
+
+# JWKS cache
+jwks-cache/
+.jwks/
+
+# =============================================================================
+# Custom Application Files
+# =============================================================================
+# Upload directories
+uploads/
+files/
+storage/
+
+# Cache directories
+cache/
+.cache/
+
+# Runtime generated files
+runtime/
+work/
+
+# =============================================================================
+# CI/CD
+# =============================================================================
+# GitHub Actions (keep workflows, ignore logs)
+.github/workflows/*.log
+
+# Jenkins
+.jenkins/
+
+# GitLab CI
+.gitlab-ci-local/
+
+# CircleCI
+.circleci/local/
+
+# =============================================================================
+# Miscellaneous
+# =============================================================================
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# SublimeText
+*.sublime-workspace
+*.sublime-project
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# =============================================================================
+# Project Specific Exclusions
+# =============================================================================
+# OAuth2 server specific temporary files
+oauth2-temp/
+auth-cache/
+
+# Test client applications
+test-client/
+demo-client/
+
+# Local Postman collections with secrets
+*-local.postman_collection.json
+*-secrets.postman_environment.json
+
+# =============================================================================
+# Include Important Files (Override some ignores)
+# =============================================================================
+# Ensure these are NOT ignored
+!.gitkeep
+!.gitignore
+!README.md
+!LICENSE
+!CHANGELOG.md
+!src/
+!pom.xml
+
+# Include sample/template configuration files
+!application.properties.template
+!application.properties.example
+!docker-compose.yml.template
+
+# Include documentation
+!docs/
+!*.md

@@ -1,0 +1,7 @@
+com/example/config/ProviderConfig.class
+com/example/config/RegisteredClientConfig.class
+com/example/config/DefaultSecurityConfig.class
+com/example/config/SecurityConfig.class
+com/example/config/OAuth2ErrorHandler.class
+com/example/AuthorizationServerApplication.class
+com/example/config/AuthorizationServerConfig.class
