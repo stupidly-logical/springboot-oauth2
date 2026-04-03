@@ -238,7 +238,7 @@ yarn.lock
 # =============================================================================
 # Local development configurations
 application-local.properties
-application-dev.properties
+# application-dev.properties is tracked — contains only logging config, no secrets
 application-development.properties
 application-test.properties
 
