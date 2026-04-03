@@ -8,8 +8,14 @@ import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
@@ -57,6 +63,18 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
+    public OAuth2AuthorizationService authorizationService(JdbcOperations jdbcOperations,
+                                                            RegisteredClientRepository registeredClientRepository) {
+        return new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClientRepository);
+    }
+
+    @Bean
+    public OAuth2AuthorizationConsentService authorizationConsentService(JdbcOperations jdbcOperations,
+                                                                          RegisteredClientRepository registeredClientRepository) {
+        return new JdbcOAuth2AuthorizationConsentService(jdbcOperations, registeredClientRepository);
+    }
+
+    @Bean
     public JWKSource<SecurityContext> jwkSource() {
         KeyPair keyPair = loadOrGenerateRsaKey();
         RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
@@ -78,11 +96,9 @@ public class AuthorizationServerConfig {
     public OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer() {
         return context -> {
             if (context.getTokenType().getValue().equals("access_token")) {
-                // Add custom claims to JWT
                 context.getClaims().claim("iss_custom", "OAuth2 Authorization Server");
                 context.getClaims().claim("server_version", "1.0.0");
 
-                // Add user authorities/roles to JWT if available
                 if (context.getPrincipal() != null && context.getPrincipal().getAuthorities() != null) {
                     context.getClaims().claim("authorities",
                         context.getPrincipal().getAuthorities().stream()
@@ -90,7 +106,6 @@ public class AuthorizationServerConfig {
                             .toList());
                 }
 
-                // Add client information
                 if (context.getRegisteredClient() != null) {
                     context.getClaims().claim("client_name", context.getRegisteredClient().getClientId());
                 }
