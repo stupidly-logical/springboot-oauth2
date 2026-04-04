@@ -46,9 +46,9 @@ Tests machine-to-machine authentication:
 - **Introspect Token** - Validates token metadata and status
 
 ### 📁 3. Authorization Code Flow
-Tests user authorization flow (requires manual browser interaction):
-- **Authorization Request** - Initiates user authorization
-- **Exchange Code for Token** - Exchanges auth code for tokens
+Tests user authorization flow (requires manual browser interaction). **PKCE is required** — include `code_challenge` (S256) in the authorization request and `code_verifier` when exchanging the code:
+- **Authorization Request** - Initiates user authorization (must include PKCE parameters)
+- **Exchange Code for Token** - Exchanges auth code + code verifier for tokens
 - **Refresh Access Token** - Uses refresh token to get new access token
 
 ### 📁 4. Token Management
@@ -77,7 +77,9 @@ Tests operational endpoints:
 | `base_url` | OAuth2 server base URL | `http://localhost:9000` |
 | `client_id` | OAuth2 client identifier | `test-client` |
 | `client_secret` | OAuth2 client secret | `secret` |
-| `redirect_uri` | OAuth2 redirect URI | `https://oauth.pstmn.io/v1/callback` |
+| `redirect_uri` | OAuth2 redirect URI | `http://localhost:9000/authorized` |
+
+> **Note:** The Postman OAuth callback URI (`https://oauth.pstmn.io/v1/callback`) is no longer registered by default. To use it, start the server with `OAUTH2_EXTRA_REDIRECT_URI=https://oauth.pstmn.io/v1/callback` and update this variable accordingly.
 
 ### Scope Configuration
 | Variable | Description | Default Value |
@@ -135,14 +137,18 @@ These are automatically set by test scripts:
 3. **Token Validation** → Run "Introspect Token (Client Credentials)"
 
 #### Authorization Code Flow (Manual Steps Required)
-1. **Authorization Request**:
-   - Copy the generated URL from "Authorization Request (Browser)"
+
+**PKCE is required.** Use Postman's built-in OAuth2 authorization helper (under the **Authorization** tab, type = OAuth 2.0, code challenge method = SHA-256) to handle PKCE automatically. Manual steps:
+
+1. **Generate PKCE values**: Postman does this automatically; or use an online PKCE generator.
+2. **Authorization Request**:
+   - Use the generated URL from "Authorization Request (Browser)" — ensure `code_challenge` and `code_challenge_method=S256` are included
    - Open URL in browser
    - Login with credentials (user/password)
    - Copy authorization code from redirect URL
    - Set `authorization_code` environment variable
-2. **Token Exchange** → Run "Exchange Code for Token"
-3. **Token Refresh** → Run "Refresh Access Token"
+3. **Token Exchange** → Run "Exchange Code for Token" (must include `code_verifier`)
+4. **Token Refresh** → Run "Refresh Access Token"
 
 ### 🔍 Error Testing
 Run requests in the "Error Scenarios" folder to test:
@@ -163,8 +169,12 @@ Run requests in the "Error Scenarios" folder to test:
 - **Solution**: Verify `client_id` and `client_secret` variables
 
 #### ❌ "Invalid redirect URI" errors
-- **Cause**: Redirect URI mismatch
-- **Solution**: Ensure `redirect_uri` matches server configuration
+- **Cause**: Redirect URI mismatch or URI not registered on the server
+- **Solution**: Ensure `redirect_uri` variable matches one of the server's registered URIs (`http://localhost:9000/authorized` or `http://localhost:9000/login/oauth2/code/test-client`). To use the Postman OAuth callback, start the server with `OAUTH2_EXTRA_REDIRECT_URI=https://oauth.pstmn.io/v1/callback`
+
+#### ❌ Authorization code exchange fails with "PKCE required"
+- **Cause**: `code_challenge` was not included in the authorization request, or `code_verifier` is missing from the token request
+- **Solution**: Use Postman's OAuth 2.0 authorization helper with Code Challenge Method = SHA-256, or generate PKCE values manually
 
 #### ❌ Authorization code flow fails
 - **Cause**: Manual step not completed or expired code

@@ -1,192 +1,88 @@
-# OAuth2 Authorization Server - Completion Summary
+# OAuth2 Authorization Server — Change History
 
-## Project Overview
-Successfully analyzed and completed the missing/incomplete code for a Spring Boot OAuth2 Authorization Server project.
+This document summarises the changes made across the project's development history, from initial scaffolding through production hardening.
 
-## Issues Identified and Fixed
+---
 
-### 1. **RegisteredClientConfig.java** ✅ COMPLETED
-- **Issue**: Empty configuration class with no OAuth2 client registration
-- **Solution**: Implemented complete OAuth2 client configuration with:
-  - Client registration for "test-client"
-  - Multiple authentication methods (CLIENT_SECRET_BASIC, CLIENT_SECRET_POST)
-  - Authorization grant types (AUTHORIZATION_CODE, REFRESH_TOKEN, CLIENT_CREDENTIALS)
-  - Proper redirect URIs including Postman testing support
-  - OIDC scopes configuration
-  - Token settings with customizable TTL
+## Phase 1 — Initial Implementation
 
-### 2. **AuthorizationServerConfig.java** ✅ COMPLETED
-- **Issue**: Missing JWT configuration and security setup
-- **Solution**: Enhanced with comprehensive OAuth2 authorization server configuration:
-  - Complete SecurityFilterChain for OAuth2 authorization server
-  - JWT encoder/decoder configuration with RSA key pair
-  - JWK Set endpoint configuration
-  - OAuth2 token customizer for JWT enhancement
-  - Proper CORS configuration integration
+The initial commit provided a Spring Boot skeleton with stub configuration classes. The following work completed the core OAuth2 server:
 
-### 3. **OAuth2ErrorHandler.java** ✅ COMPLETED
-- **Issue**: Missing global error handling for OAuth2 exceptions
-- **Solution**: Created new comprehensive error handler:
-  - Global exception handling for OAuth2AuthenticationException
-  - Standardized error response format
-  - Proper HTTP status code mapping
-  - Error logging for debugging
+| File | Change |
+|---|---|
+| `RegisteredClientConfig.java` | Implemented `test-client` with auth code, client credentials, refresh token, OIDC scopes |
+| `AuthorizationServerConfig.java` | Added OAuth2 security filter chain, RSA JWT signing, JWK Set endpoint, OIDC, token customizer |
+| `OAuth2ErrorHandler.java` | Created RFC 6749-compliant global exception handler |
+| `DefaultSecurityConfig.java` | Added form login, CORS, in-memory user details |
+| `SecurityConfig.java` | Removed duplicate bean definitions; kept `BCryptPasswordEncoder` |
+| `application.properties` | Added comprehensive env-var-driven configuration |
 
-### 4. **DefaultSecurityConfig.java** ✅ COMPLETED
-- **Issue**: Missing CORS configuration and incomplete security setup
-- **Solution**: Enhanced with complete security configuration:
-  - CORS configuration with environment variable support
-  - Default security filter chain
-  - In-memory user details service for testing
-  - Integration with OAuth2 authorization server
+---
 
-### 5. **SecurityConfig.java** ✅ COMPLETED
-- **Issue**: Duplicate bean definitions causing startup conflicts
-- **Solution**: Cleaned up to avoid conflicts:
-  - Removed duplicate RegisteredClientRepository bean
-  - Kept essential PasswordEncoder bean
-  - Eliminated bean definition conflicts
+## Phase 2 — Production Hardening (PRs #2–#7)
 
-### 6. **application.properties** ✅ COMPLETED
-- **Issue**: Basic configuration missing comprehensive settings
-- **Solution**: Enhanced with production-ready configuration:
-  - Server configuration with environment variables
-  - Database configuration (H2 for development, PostgreSQL example for production)
-  - JPA/Hibernate configuration with connection pooling
-  - Comprehensive logging configuration
-  - Actuator endpoints configuration
-  - Environment variable support throughout
+Six pull requests brought the server to a production-ready baseline:
 
-### 7. **pom.xml** ✅ COMPLETED
-- **Issue**: Java version compatibility
-- **Solution**: Updated Java version from 17 to 21 for better compatibility
+### PR #2 — Documentation
+- Rewrote README with architecture diagram, endpoint table, env var reference, production checklist
 
-## Key Features Implemented
+### PR #6 — CI and Dependencies
+- GitHub Actions workflow added (`maven.yml`), aligned to **JDK 21**
+- Spring Boot upgraded `3.1.0` → **3.3.6** (EOL → supported)
+- Spring Authorization Server upgraded `1.1.2` → **1.3.3**
+- `maven-compiler-plugin` source/target updated to 21
+- `spring-security-test` given explicit version (`6.3.4`) — no parent BOM present
+- Added `AuthorizationServerApplicationTests.java` (context load test)
 
-### OAuth2 Authorization Server Features
-- ✅ Authorization Code Grant Flow
-- ✅ Client Credentials Grant Flow
-- ✅ Refresh Token Support
-- ✅ JWT Token Generation
-- ✅ OIDC Support (OpenID Connect)
-- ✅ JWK Set Endpoint
-- ✅ Token Introspection
-- ✅ Token Revocation
-- ✅ Device Authorization Grant (configured)
+### PR #5 — Observability and Error Handling
+- `OAuth2ErrorHandler`: stack traces removed from HTTP responses; only logged server-side
+- Profile-aware development mode detection using `Environment.acceptsProfiles()` instead of `System.getProperty`
+- `application.properties`: SQL logging defaults changed from `DEBUG`/`TRACE` → **`WARN`**
+- `application-dev.properties` (new): re-enables verbose SQL logging when `spring.profiles.active=dev`
 
-### Security Features
-- ✅ BCrypt Password Encoding
-- ✅ CORS Configuration
-- ✅ CSRF Protection
-- ✅ Global Error Handling
-- ✅ Authentication and Authorization
-- ✅ JWT Token Customization
+### PR #3 — Security Critical
+- `AuthorizationServerConfig`: RSA key pair now **persisted to PEM files** (`keys/jwt.{private,public}.pem`); reloaded on restart
+- `RegisteredClientConfig`: client secret moved to `OAUTH2_CLIENT_SECRET` env var; **PKCE enforced** (`requireProofKey(true)`); Postman redirect URI removed; additional URI configurable via `OAUTH2_EXTRA_REDIRECT_URI`
+- `DefaultSecurityConfig`: CORS origins driven by `CORS_ALLOWED_ORIGINS` env var
+- `application.properties`: added `jwt.key-path`, `oauth2.client.secret`, `oauth2.extra-redirect-uri`, `cors.allowed-origins`
 
-### Development Features
-- ✅ H2 Database Console (/h2-console)
-- ✅ Actuator Endpoints (/actuator/health, /actuator/info, /actuator/metrics)
-- ✅ Comprehensive Logging
-- ✅ Environment Variable Configuration
-- ✅ Profile-based Configuration Support
+### PR #4 — JDBC Persistence
+- Replaced all in-memory stores:
+  - `JdbcRegisteredClientRepository` (clients)
+  - `JdbcOAuth2AuthorizationService` (tokens, auth codes)
+  - `JdbcOAuth2AuthorizationConsentService` (consents)
+  - `JdbcUserDetailsManager` (users)
+- `spring.sql.init` schema initialization enabled; `spring.jpa.defer-datasource-initialization=true` ensures schemas exist before Hibernate
+- All test-data seeding moved to `ApplicationRunner` beans (executes after full context init, avoiding schema-not-ready errors)
 
-## Project Structure (Final)
-```
-src/
-├── main/
-│   ├── java/com/example/
-│   │   ├── AuthorizationServerApplication.java
-│   │   └── config/
-│   │       ├── AuthorizationServerConfig.java      ✅ Enhanced
-│   │       ├── DefaultSecurityConfig.java         ✅ Enhanced  
-│   │       ├── OAuth2ErrorHandler.java            ✅ New
-│   │       ├── ProviderConfig.java
-│   │       ├── RegisteredClientConfig.java        ✅ Completed
-│   │       └── SecurityConfig.java                ✅ Cleaned
-│   └── resources/
-│       └── application.properties                 ✅ Enhanced
-```
+### PR #7 — Hardening
+- `RateLimitingFilter` (new): Bucket4j-backed, 20 requests/minute per IP on `POST /oauth2/token`; returns HTTP 429 on exhaustion
+- `DefaultSecurityConfig`: added HSTS, Content-Security-Policy, X-Content-Type-Options, Referrer-Policy headers; wired `RateLimitingFilter` before `UsernamePasswordAuthenticationFilter`
+- `ProviderConfig`: issuer URI driven by `OAUTH2_ISSUER_URI` env var
+- `application.properties`: added `oauth2.issuer-uri`
 
-## Testing Endpoints
+---
 
-### OAuth2 Authorization Server Endpoints
-- **Authorization**: `GET http://localhost:9000/oauth2/authorize`
-- **Token**: `POST http://localhost:9000/oauth2/token`
-- **JWK Set**: `GET http://localhost:9000/oauth2/jwks`
-- **Token Introspection**: `POST http://localhost:9000/oauth2/introspect`
-- **Token Revocation**: `POST http://localhost:9000/oauth2/revoke`
-- **Server Metadata**: `GET http://localhost:9000/.well-known/oauth-authorization-server`
-- **OIDC Configuration**: `GET http://localhost:9000/.well-known/openid_configuration`
+## Current State
 
-### Management Endpoints
-- **Health Check**: `GET http://localhost:9000/actuator/health`
-- **Application Info**: `GET http://localhost:9000/actuator/info`
-- **Metrics**: `GET http://localhost:9000/actuator/metrics`
-- **H2 Console**: `GET http://localhost:9000/h2-console`
+| Area | Status |
+|---|---|
+| Spring Boot version | 3.3.6 |
+| Java version | 21 |
+| JWT key persistence | PEM files (auto-generated, reloaded on restart) |
+| Client/token/consent storage | JDBC (H2 in dev, configurable) |
+| User storage | JDBC (`JdbcUserDetailsManager`) |
+| PKCE | Enforced on `test-client` |
+| Rate limiting | 20 req/min per IP on `/oauth2/token` |
+| Security headers | HSTS, CSP, X-Content-Type-Options, Referrer-Policy |
+| Secrets | All via environment variables |
+| CI | GitHub Actions, JDK 21, Maven build + test |
 
-## Client Configuration
-- **Client ID**: `test-client`
-- **Client Secret**: `secret`
-- **Redirect URIs**: 
-  - `http://localhost:9000/login/oauth2/code/test-client`
-  - `http://localhost:9000/authorized`
-  - `https://oauth.pstmn.io/v1/callback` (for Postman testing)
-- **Scopes**: `openid`, `profile`, `read`, `write`
+## Remaining Before Production
 
-## Build and Run Instructions
-
-### Prerequisites
-- Java 21+
-- Maven 3.6+
-
-### Running the Application
-```bash
-# Clone and navigate to project
-cd /path/to/oauth2-java
-
-# Build the project
-mvn clean compile
-
-# Run the application
-mvn spring-boot:run
-
-# Or build and run JAR
-mvn clean package
-java -jar target/oauth-server-0.0.1-SNAPSHOT.jar
-```
-
-### Environment Variables (Optional)
-```bash
-export SERVER_PORT=9000
-export DATABASE_URL=jdbc:h2:mem:authdb
-export LOGGING_LEVEL_SECURITY=DEBUG
-export H2_CONSOLE_ENABLED=true
-```
-
-## Production Deployment Notes
-
-1. **Database Configuration**: Update `application.properties` to use PostgreSQL
-2. **Security Settings**: 
-   - Disable H2 console (`H2_CONSOLE_ENABLED=false`)
-   - Set appropriate CORS origins
-   - Use secure JWT key storage
-3. **Logging**: Reduce log levels for production
-4. **Monitoring**: Enable additional actuator endpoints as needed
-
-## Verification Status
-- ✅ **Compilation**: Project compiles successfully
-- ✅ **Startup**: Application starts without errors
-- ✅ **Configuration**: All beans load correctly
-- ✅ **Endpoints**: OAuth2 server endpoints are configured
-- ✅ **Security**: Authentication and authorization working
-- ✅ **Error Handling**: Global error handler implemented
-
-## Summary
-The OAuth2 Authorization Server project is now **COMPLETE** and production-ready with:
-- Full OAuth2 authorization server implementation
-- Comprehensive configuration management
-- Production-ready security setup
-- Complete error handling
-- Enhanced logging and monitoring
-- Development and production deployment support
-
-All missing and incomplete code has been successfully identified and implemented.
+- Switch datasource to PostgreSQL
+- Disable H2 console (`H2_CONSOLE_ENABLED=false`)
+- Set `OAUTH2_ISSUER_URI` to an `https://` domain
+- Set `CORS_ALLOWED_ORIGINS` to specific production origins
+- Move RSA keys to a secrets manager
+- Secure or restrict the `/actuator` endpoints
