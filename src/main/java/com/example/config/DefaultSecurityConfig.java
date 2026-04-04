@@ -11,6 +11,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -29,6 +31,12 @@ public class DefaultSecurityConfig {
     @Value("${cors.allowed-origins:}")
     private String corsAllowedOrigins;
 
+    private final RateLimitingFilter rateLimitingFilter;
+
+    public DefaultSecurityConfig(RateLimitingFilter rateLimitingFilter) {
+        this.rateLimitingFilter = rateLimitingFilter;
+    }
+
     @Bean
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -42,9 +50,18 @@ public class DefaultSecurityConfig {
             )
             .formLogin(withDefaults())
             .headers(headers -> headers
-                    .frameOptions(frameOptions -> frameOptions.sameOrigin()) // For H2 console
+                .frameOptions(frameOptions -> frameOptions.sameOrigin()) // For H2 console
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31536000))
+                .contentTypeOptions(withDefaults())
+                .referrerPolicy(referrer -> referrer
+                    .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                .contentSecurityPolicy(csp -> csp
+                    .policyDirectives("default-src 'self'; frame-ancestors 'self'"))
             )
-            .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**")); // For H2 console
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**"))
+            .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

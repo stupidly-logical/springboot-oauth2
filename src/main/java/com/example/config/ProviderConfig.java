@@ -1,15 +1,20 @@
 package com.example.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 
 @Configuration
 public class ProviderConfig {
+
+    @Value("${oauth2.issuer-uri:http://localhost:9000}")
+    private String issuerUri;
+
     @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
         return AuthorizationServerSettings.builder()
-                .issuer("http://localhost:9000")
+                .issuer(issuerUri)
                 .build();
     }
 }
