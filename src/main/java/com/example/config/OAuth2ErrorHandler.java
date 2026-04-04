@@ -99,6 +99,6 @@ public class OAuth2ErrorHandler extends ResponseEntityExceptionHandler {
     }
 
     private boolean isDevelopmentMode() {
-        return environment.matchesProfiles(Profiles.of("dev | local | default"));
+        return environment.acceptsProfiles(Profiles.of("dev | local | default"));
     }
 }
