@@ -1,6 +1,6 @@
 # OAuth2 Authorization Server
 
-A production-oriented OAuth2 Authorization Server built with **Spring Boot 3** and **Spring Security OAuth2 Authorization Server 1.1**. It implements the full OAuth2/OIDC specification including Authorization Code Flow, Client Credentials, Refresh Tokens, token introspection, and revocation — backed by JWT signing via RSA key pairs.
+A production-oriented OAuth2 Authorization Server built with **Spring Boot 3.3** and **Spring Security OAuth2 Authorization Server 1.3**. It implements the full OAuth2/OIDC specification including Authorization Code Flow (with PKCE), Client Credentials, Refresh Tokens, token introspection, and revocation — backed by JWT signing via persistent RSA key pairs and JDBC-backed state.
 
 > **Status:** Development-ready. See [Production Checklist](#production-checklist) before deploying.
 
@@ -43,19 +43,24 @@ Resource servers and clients are configured separately and point to this server 
 │                                                                  │
 │  ┌──────────────────────┐   ┌──────────────────────────────┐    │
 │  │  AuthorizationServer │   │     DefaultSecurityConfig    │    │
-│  │       Config         │   │  (Form login, CORS, users)   │    │
-│  │  - JWT signing (RSA) │   └──────────────────────────────┘    │
+│  │       Config         │   │  (Form login, CORS, headers, │    │
+│  │  - JWT signing (RSA) │   │   JDBC users, rate limiting) │    │
+│  │  - Persistent keys   │   └──────────────────────────────┘    │
 │  │  - OIDC support      │                                        │
-│  │  - Custom claims     │   ┌──────────────────────────────┐    │
+│  │  - JDBC token store  │   ┌──────────────────────────────┐    │
 │  └──────────────────────┘   │    RegisteredClientConfig    │    │
-│                             │  (Clients, scopes, grant     │    │
-│  ┌──────────────────────┐   │   types, redirect URIs)      │    │
+│                             │  (JDBC clients, PKCE, scopes,│    │
+│  ┌──────────────────────┐   │   grant types, redirect URIs)│    │
 │  │   ProviderConfig     │   └──────────────────────────────┘    │
 │  │  - Issuer URI        │                                        │
-│  │    (localhost:9000)  │   ┌──────────────────────────────┐    │
+│  │    (env-var driven)  │   ┌──────────────────────────────┐    │
 │  └──────────────────────┘   │     OAuth2ErrorHandler       │    │
 │                             │  (RFC 6749 error responses)  │    │
-│                             └──────────────────────────────┘    │
+│  ┌──────────────────────┐   └──────────────────────────────┘    │
+│  │  RateLimitingFilter  │                                        │
+│  │  - 20 req/min per IP │                                        │
+│  │    on /oauth2/token  │                                        │
+│  └──────────────────────┘                                        │
 └─────────────────────────────────────────────────────────────────┘
            │                              │
            ▼                              ▼
@@ -64,10 +69,10 @@ Resource servers and clients are configured separately and point to this server 
 ```
 
 **Token flow:**
-1. Client redirects user to `/oauth2/authorize`
+1. Client redirects user to `/oauth2/authorize` (with PKCE `code_challenge`)
 2. User authenticates via form login
 3. Server issues authorization code (Authorization Code Flow) or token directly (Client Credentials)
-4. Client exchanges code for tokens at `/oauth2/token`
+4. Client exchanges code for tokens at `/oauth2/token` (with PKCE `code_verifier`)
 5. Resource server validates JWT using the public JWK from `/oauth2/jwks`
 
 ---
@@ -77,21 +82,27 @@ Resource servers and clients are configured separately and point to this server 
 ```
 oauth2-java/
 ├── src/
-│   └── main/
-│       ├── java/com/example/
-│       │   ├── AuthorizationServerApplication.java     # Entry point
-│       │   └── config/
-│       │       ├── AuthorizationServerConfig.java      # Core OAuth2/JWT config
-│       │       ├── DefaultSecurityConfig.java          # Security filter chain, CORS, users
-│       │       ├── OAuth2ErrorHandler.java             # RFC 6749 error handling
-│       │       ├── ProviderConfig.java                 # Issuer URI settings
-│       │       ├── RegisteredClientConfig.java         # OAuth2 client definitions
-│       │       └── SecurityConfig.java                 # Password encoder bean
-│       └── resources/
-│           └── application.properties                  # All configuration with env var overrides
+│   ├── main/
+│   │   ├── java/com/example/
+│   │   │   ├── AuthorizationServerApplication.java     # Entry point
+│   │   │   └── config/
+│   │   │       ├── AuthorizationServerConfig.java      # Core OAuth2/JWT config, JDBC token store
+│   │   │       ├── DefaultSecurityConfig.java          # Security filter chain, CORS, JDBC users
+│   │   │       ├── OAuth2ErrorHandler.java             # RFC 6749 error handling
+│   │   │       ├── ProviderConfig.java                 # Issuer URI settings
+│   │   │       ├── RateLimitingFilter.java             # Bucket4j rate limiter (token endpoint)
+│   │   │       ├── RegisteredClientConfig.java         # JDBC OAuth2 client definitions
+│   │   │       └── SecurityConfig.java                 # Password encoder bean
+│   │   └── resources/
+│   │       ├── application.properties                  # All configuration with env var overrides
+│   │       └── application-dev.properties              # Dev overrides (verbose SQL logging)
+│   └── test/
+│       └── java/com/example/
+│           └── AuthorizationServerApplicationTests.java # Context load test
 ├── .github/
 │   └── workflows/
-│       └── maven.yml                                   # CI: build + dependency graph
+│       └── maven.yml                                   # CI: JDK 21, build + test
+├── keys/                                               # RSA key pair (auto-generated, gitignored)
 ├── OAuth2-Authorization-Server-Tests.postman_collection.json
 ├── OAuth2-Server-Development.postman_environment.json
 ├── OAuth2-Server-Production.postman_environment.json
@@ -103,18 +114,19 @@ oauth2-java/
 
 | Class | Responsibility |
 |---|---|
-| `AuthorizationServerConfig` | Configures the OAuth2 authorization server security filter chain, RSA JWT signing, JWK set, OIDC, and custom JWT claims |
-| `DefaultSecurityConfig` | Default HTTP security (form login, CORS, permit-list for public endpoints, in-memory users) |
-| `RegisteredClientConfig` | Defines allowed OAuth2 clients: grant types, scopes, redirect URIs, token TTLs |
-| `ProviderConfig` | Sets the `issuer` URI used in server metadata and tokens |
+| `AuthorizationServerConfig` | OAuth2 authorization server filter chain, persistent RSA JWT signing, JWK set, OIDC, JDBC authorization/consent stores, custom JWT claims |
+| `DefaultSecurityConfig` | Default HTTP security (form login, CORS, security headers, rate limiting, JDBC-backed users) |
+| `RegisteredClientConfig` | JDBC-backed OAuth2 client registry; seeds `test-client` with PKCE enabled on startup |
+| `ProviderConfig` | Sets the `issuer` URI used in server metadata and tokens (env-var driven) |
 | `OAuth2ErrorHandler` | Maps OAuth2 and Spring Security exceptions to RFC 6749-compliant JSON error responses |
+| `RateLimitingFilter` | Bucket4j rate limiter: 20 requests/minute per IP on `POST /oauth2/token` |
 | `SecurityConfig` | Provides the `BCryptPasswordEncoder` bean |
 
 ---
 
 ## Prerequisites
 
-- Java 17+
+- Java 21+
 - Maven 3.6+
 
 ---
@@ -132,6 +144,9 @@ mvn spring-boot:run
 # Or build and run the JAR
 mvn clean package
 java -jar target/*.jar
+
+# Run in dev mode (enables verbose SQL logging)
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 The server starts at **http://localhost:9000**.
@@ -144,6 +159,8 @@ curl http://localhost:9000/actuator/health
 curl http://localhost:9000/.well-known/oauth-authorization-server
 # Returns server metadata JSON
 ```
+
+RSA keys are auto-generated on first startup and saved to `keys/jwt.private.pem` / `keys/jwt.public.pem`. Subsequent restarts reuse the same key pair, so existing tokens remain valid.
 
 ---
 
@@ -168,7 +185,7 @@ curl http://localhost:9000/.well-known/oauth-authorization-server
 | `GET` | `/actuator/health` | Health check |
 | `GET` | `/actuator/info` | Application info |
 | `GET` | `/actuator/metrics` | Metrics |
-| `GET` | `/h2-console` | H2 DB console **(dev only)** |
+| `GET` | `/h2-console` | H2 DB console **(dev only — disable in production)** |
 
 ---
 
@@ -181,10 +198,13 @@ curl http://localhost:9000/.well-known/oauth-authorization-server
 | Setting | Value |
 |---------|-------|
 | Client ID | `test-client` |
-| Client Secret | `secret` |
+| Client Secret | `secret` (override with `OAUTH2_CLIENT_SECRET`) |
 | Grant types | `authorization_code`, `refresh_token`, `client_credentials` |
 | Scopes | `openid`, `profile`, `read`, `write` |
-| Redirect URIs | `http://localhost:9000/login/oauth2/code/test-client`, `http://localhost:9000/authorized`, `https://oauth.pstmn.io/v1/callback` |
+| PKCE | Required for Authorization Code Flow |
+| Redirect URIs | `http://localhost:9000/login/oauth2/code/test-client`, `http://localhost:9000/authorized` |
+
+To add a redirect URI without changing code, set `OAUTH2_EXTRA_REDIRECT_URI=https://your-app.example.com/callback`.
 
 **Test Users:**
 
@@ -206,18 +226,29 @@ curl -s -X POST http://localhost:9000/oauth2/token \
   -d "grant_type=client_credentials&scope=read" | jq .
 ```
 
-### Quick test — Authorization Code Flow (manual)
+### Quick test — Authorization Code Flow
 
-1. Open in browser: `http://localhost:9000/oauth2/authorize?response_type=code&client_id=test-client&redirect_uri=http://localhost:9000/authorized&scope=openid+read`
-2. Log in as `user` / `password`
-3. Copy the `code` query parameter from the redirect
-4. Exchange it:
-```bash
-curl -s -X POST http://localhost:9000/oauth2/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -u "test-client:secret" \
-  -d "grant_type=authorization_code&code=<CODE>&redirect_uri=http://localhost:9000/authorized" | jq .
-```
+Authorization Code Flow requires **PKCE**. Use a PKCE-capable tool (Postman, a browser-based OAuth2 playground, or a client library) for end-to-end testing.
+
+1. Generate a code verifier and code challenge (base64url(sha256(verifier)))
+2. Open in browser:
+   ```
+   http://localhost:9000/oauth2/authorize
+     ?response_type=code
+     &client_id=test-client
+     &redirect_uri=http://localhost:9000/authorized
+     &scope=openid+read
+     &code_challenge=<YOUR_CODE_CHALLENGE>
+     &code_challenge_method=S256
+   ```
+3. Log in as `user` / `password`
+4. Exchange the code:
+   ```bash
+   curl -s -X POST http://localhost:9000/oauth2/token \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -u "test-client:secret" \
+     -d "grant_type=authorization_code&code=<CODE>&redirect_uri=http://localhost:9000/authorized&code_verifier=<YOUR_CODE_VERIFIER>" | jq .
+   ```
 
 ### Postman
 
@@ -232,36 +263,45 @@ All settings in `application.properties` can be overridden with environment vari
 | Environment Variable | Default | Description |
 |---|---|---|
 | `SERVER_PORT` | `9000` | Server port |
-| `OAUTH2_CLIENT_ID` | `test-client` | OAuth2 client ID |
-| `OAUTH2_CLIENT_SECRET` | *(bcrypt of "secret")* | OAuth2 client secret (BCrypt encoded) |
-| `OAUTH2_ISSUER_URI` | `http://localhost:9000` | Token issuer URI |
-| `DATABASE_URL` | H2 in-memory | JDBC URL |
+| `SERVER_CONTEXT_PATH` | `/` | Servlet context path |
+| `OAUTH2_ISSUER_URI` | `http://localhost:9000` | Token issuer URI (use `https://` in production) |
+| `OAUTH2_CLIENT_SECRET` | `secret` | OAuth2 client secret for `test-client` |
+| `OAUTH2_EXTRA_REDIRECT_URI` | *(empty)* | Additional allowed redirect URI for `test-client` |
+| `JWT_KEY_PATH` | `keys/jwt` | Path prefix for RSA key files (`.private.pem` / `.public.pem` appended) |
+| `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated additional CORS origin patterns (e.g. `https://*.example.com`) |
+| `DATABASE_URL` | `jdbc:h2:mem:authdb` | JDBC URL |
+| `DATABASE_DRIVER` | `org.h2.Driver` | JDBC driver class |
 | `DATABASE_USERNAME` | `sa` | DB username |
 | `DATABASE_PASSWORD` | *(empty)* | DB password |
-| `HIKARI_MAX_POOL_SIZE` | `10` | Max DB connection pool size |
-| `HIKARI_MIN_IDLE` | `5` | Min idle DB connections |
+| `DB_MAX_POOL_SIZE` | `10` | HikariCP max pool size |
+| `DB_MIN_IDLE` | `5` | HikariCP min idle connections |
+| `DB_CONNECTION_TIMEOUT` | `20000` | HikariCP connection timeout (ms) |
+| `H2_CONSOLE_ENABLED` | `true` | Enable H2 web console (set `false` in production) |
+| `LOGGING_LEVEL_ROOT` | `INFO` | Root log level |
+| `ACTUATOR_ENDPOINTS` | `health,info,metrics` | Exposed actuator endpoints |
+| `ACTUATOR_HEALTH_SHOW_DETAILS` | `when-authorized` | Health details visibility |
 
 ---
 
 ## Production Checklist
 
-The following **must** be addressed before production deployment:
-
-- [ ] **Persistent JWT keys** — RSA key pair is currently generated in-memory on every startup, invalidating all existing tokens on restart. Load from a keystore or secrets manager.
-- [ ] **Persist OAuth2 state** — Authorization codes, tokens, and consents are in-memory. Use `JdbcOAuth2AuthorizationService` with a real database.
-- [ ] **Persist registered clients** — Use `JdbcRegisteredClientRepository` instead of in-memory.
-- [ ] **Replace test users** — Wire a real `UserDetailsService` backed by a database or LDAP.
-- [ ] **Rotate secrets** — Change client secret, use environment variables; never commit secrets.
-- [ ] **Enable PKCE** — Set `requireProofKey(true)` for public clients.
-- [ ] **Switch to PostgreSQL** — Configure `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`.
-- [ ] **Disable H2 console** — Set `spring.h2.console.enabled=false`.
-- [ ] **HTTPS only** — Enforce TLS; set `OAUTH2_ISSUER_URI` to your `https://` domain.
-- [ ] **Restrict CORS** — Replace `localhost:*` wildcard with specific production origins.
-- [ ] **Add rate limiting** — Protect `/oauth2/token` and `/oauth2/authorize` from brute force.
-- [ ] **Security headers** — Add HSTS, Content-Security-Policy, X-Content-Type-Options.
-- [ ] **Add tests** — No unit or integration tests exist yet.
-- [ ] **Update dependencies** — Spring Boot 3.1.0 is outdated; upgrade to 3.3.x or later.
-- [ ] **Fix CI JDK version** — Workflow uses JDK 17 but `pom.xml` targets Java 21.
+- [x] **Persistent JWT keys** — RSA key pair saved to `keys/jwt.{private,public}.pem`; reloaded on restart.
+- [x] **Persist OAuth2 state** — Authorization codes, tokens, and consents use `JdbcOAuth2AuthorizationService`.
+- [x] **Persist registered clients** — `JdbcRegisteredClientRepository` backed by the configured datasource.
+- [x] **JDBC user store** — `JdbcUserDetailsManager`; replace seed users with your own provisioning.
+- [x] **Env-var secrets** — Client secret driven by `OAUTH2_CLIENT_SECRET`; no hardcoded secrets.
+- [x] **PKCE enforced** — `requireProofKey(true)` set on `test-client`; required for Authorization Code Flow.
+- [x] **Rate limiting** — 20 requests/minute per IP on `POST /oauth2/token` via Bucket4j.
+- [x] **Security headers** — HSTS, Content-Security-Policy, X-Content-Type-Options, Referrer-Policy.
+- [x] **Updated dependencies** — Spring Boot 3.3.6, Spring Authorization Server 1.3.3, Java 21.
+- [x] **CI aligned** — GitHub Actions workflow uses JDK 21 matching `pom.xml`.
+- [x] **Basic test coverage** — Spring context load test in CI.
+- [ ] **Switch to PostgreSQL** — Set `DATABASE_URL`, `DATABASE_DRIVER`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`. Update `JPA_DATABASE_PLATFORM` to `org.hibernate.dialect.PostgreSQLDialect`.
+- [ ] **Disable H2 console** — Set `H2_CONSOLE_ENABLED=false` (or unset; default is `true`).
+- [ ] **HTTPS only** — Enforce TLS termination; set `OAUTH2_ISSUER_URI` to your `https://` domain.
+- [ ] **Restrict CORS** — Set `CORS_ALLOWED_ORIGINS` to your specific production origins; the `localhost:*` wildcard is always included as a fallback.
+- [ ] **Restrict actuator** — Secure `/actuator/**` behind authentication or expose only on a management port.
+- [ ] **Key storage** — Move RSA keys from filesystem to a secrets manager (Vault, AWS Secrets Manager, etc.) for cloud deployments.
 
 ---
 
