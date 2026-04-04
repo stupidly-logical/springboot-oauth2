@@ -94,13 +94,13 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/.well-known/openid_configuration",
+							"raw": "{{base_url}}/.well-known/openid-configuration",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								".well-known",
-								"openid_configuration"
+								"openid-configuration"
 							]
 						},
 						"description": "Get OpenID Connect configuration"
@@ -370,6 +370,19 @@
 					"name": "Exchange Code for Token",
 					"event": [
 						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const code = pm.environment.get('authorization_code');",
+									"if (!code || code.trim() === '') {",
+									"    console.log('Skipping Exchange Code for Token - authorization_code not set. Complete browser login first.');",
+									"    pm.execution.skipRequest();",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
 							"listen": "test",
 							"script": {
 								"exec": [
@@ -466,6 +479,19 @@
 				{
 					"name": "Refresh Access Token",
 					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const token = pm.environment.get('refresh_token');",
+									"if (!token || token.trim() === '') {",
+									"    console.log('Skipping Refresh Access Token - refresh_token not set. Run Exchange Code for Token first.');",
+									"    pm.execution.skipRequest();",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
 						{
 							"listen": "test",
 							"script": {
